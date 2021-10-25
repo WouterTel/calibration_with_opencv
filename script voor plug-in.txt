@@ -1,0 +1,3 @@
+let posRelative = createPose(x_adapt, y_adapt, z_adapt, rx, ry, rz);
+let curPose = currentPose
+let newPose = poseTrans(curPose, posRelative)
