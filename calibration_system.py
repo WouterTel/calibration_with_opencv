@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import glob
 import math
+import pymsgbox
 
 # Defining the dimensions of checkerboard
 CHECKERBOARD = (7,10)   # (heigth,width)
@@ -23,6 +24,8 @@ def calibrate_camera():
     images = glob.glob('./afbeeldingen/*.jpg')
 
     for fname in images:
+    #for i in range (1,11):
+        img = _get_camera_image()
         #print('processing image:' + fname)
         img = cv2.imread(fname)
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -64,16 +67,11 @@ def calibrate_camera():
     #print("tvecs : \n")
     #print(tvecs)
 
-def _get_rot_dist(image):
-    #frame = get_camera_image()
-    #if(type(frame) == bool):
-    #    return False
-
-    #cv2.imshow('frame', frame)
-    #cv2.waitKey(0)
+def _get_rot_dist():
 
     # Get grayscale of image and find crosspoints
-    img = cv2.imread(image)
+    img = _get_image_on_press(1)
+    #img = cv2.imread(image)
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     ret, corners = cv2.findChessboardCorners(gray, CHECKERBOARD, cv2.CALIB_CB_ADAPTIVE_THRESH+
             cv2.CALIB_CB_FAST_CHECK+cv2.CALIB_CB_NORMALIZE_IMAGE)
@@ -102,7 +100,7 @@ def _get_camera_image():
         raise ValueError()
 
 def initial_calibration():
-    (calRotMat, calTvec) = _get_rot_dist('test_afbeelding/test_dist_300mm.jpg')
+    (calRotMat, calTvec) = _get_rot_dist()
     np.save('calibration/calRotMat.npy',calRotMat)
     np.save('calibration/calTvec.npy',calTvec)
 
@@ -110,10 +108,14 @@ def operation_calibration():
     calRotMat = np.load('calibration/calRotMat.npy')    
     calTvec = np.load('calibration/calTvec.npy')
 
-    (operRotMat, operTvec) = _get_rot_dist('test_afbeelding/links_onder.jpg')
+    (operRotMat, operTvec) = _get_rot_dist()
 
-    tvecRel = calTvec - operTvec
-    rvecRel = _get_euler_angles(operRotMat,calRotMat)
+    #tvecRel = calTvec - operTvec
+    #rvecRel = _get_euler_angles(operRotMat,calRotMat)
+
+    tvecRel = operTvec - calTvec
+    rvecRel = _get_euler_angles(calRotMat,operRotMat)
+
     return [tvecRel.item(0),tvecRel.item(1),tvecRel.item(2),rvecRel[0],rvecRel[1],rvecRel[2]]
     
 def _get_euler_angles (rotMatBase, rotMatCal):
@@ -126,17 +128,66 @@ def _get_euler_angles (rotMatBase, rotMatCal):
     ry = ry*180/math.pi
     rz = rz*180/math.pi
     
-    print ('rx: {rx}'.format(rx = rx))
-    print ('ry: {ry}'.format(ry = ry))
-    print ('rz: {rz}'.format(rz = rz))
+    #print ('rx: {rx}'.format(rx = rx))
+    #print ('ry: {ry}'.format(ry = ry))
+    #print ('rz: {rz}'.format(rz = rz))
 
     return (rx, ry, rz)
 
+def _get_image_on_press(camera):
+    cap = cv2.VideoCapture(camera)
+    while True:
+        ret, frame = cap.read()
+        cv2.imshow('frame',frame)
+        if cv2.waitKey(1) == ord('q'):
+            cv2.destroyAllWindows()
+            return frame
+
+def calibrate_camera2():
+    # Creating vector to store coordinates checkerboard crosspoints in real world
+    objpoints = []
+    # Creating vector to store coordinates checkerboard crosspoints on image
+    imgpoints = [] 
+
+    for i in range (1,11):
+        img = _get_image_on_press(1)
+        gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+        # Find the chess board crosspoints
+        # If desired number of crosspoints are found in the image then ret = true
+        ret, corners = cv2.findChessboardCorners(gray, CHECKERBOARD, cv2.CALIB_CB_ADAPTIVE_THRESH+
+            cv2.CALIB_CB_FAST_CHECK+cv2.CALIB_CB_NORMALIZE_IMAGE)
+        
+        """
+        If desired number of crosspoints are detected,
+        pixel coordinates are refined and coordinates are stored in vector
+        """
+        if ret == True:
+            # refining pixel coordinates for given 2d points.
+            corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
+            
+            # Add coordinate points to vector
+            imgpoints.append(corners2)  # coordinates in image
+            objpoints.append(objp)      # coordinates in real world
+        else:
+            pymsgbox.alert('Try again!','Pas op!')
+            i = i-1 
+
+    """
+    Performing camera calibration by 
+    passing the value of known coordinates in real world (objpoints)
+    and corresponding pixel coordinates in images of the 
+    detected crosspoints (imgpoints)
+    """
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None)
+    np.save('calibration/mtx.npy',mtx)
+    np.save('calibration/dist.npy',dist)
+            
 
 
 if __name__ == "__main__":
-    initial_calibration()
-    changeVec = operation_calibration()
-    print(changeVec)
-    
+    #calibrate_camera2()
+    #initial_calibration()
+    vec = operation_calibration()
+    print(vec)
     
